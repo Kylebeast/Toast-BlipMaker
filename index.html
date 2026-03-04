@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FiveM Blip Builder</title>
+<style>
+:root{--bg:#0b1220;--muted:#8ea3c6;--text:#e8f0ff;--border:#1e2c4d;--ok:#37d67a;--bad:#ff5c5c}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:radial-gradient(900px 500px at 20% 0%,#14264a 0%,var(--bg) 60%);color:var(--text);padding:24px}
+.wrap{max-width:980px;margin:0 auto;display:grid;gap:16px}
+.card{background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01));border:1px solid var(--border);border-radius:14px;padding:16px}
+h1{margin:0 0 6px 0;font-size:22px}
+.sub{color:var(--muted);font-size:13px;margin:0 0 14px 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:900px){.grid{grid-template-columns:1fr}}
+label{display:block;color:var(--muted);font-size:12px;margin:10px 0 6px}
+input,select{width:100%;background:#0a1427;border:1px solid var(--border);border-radius:12px;color:var(--text);padding:10px 12px;font-size:13px;outline:none}
+input:focus,select:focus{border-color:#4da3ff;box-shadow:0 0 0 4px rgba(77,163,255,0.15)}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.btn{border:1px solid var(--border);background:#0a1427;color:var(--text);padding:10px 12px;border-radius:12px;cursor:pointer;font-size:13px}
+.btn:hover{border-color:#4da3ff}
+.btn.good{border-color:rgba(55,214,122,0.45);background:rgba(55,214,122,0.12)}
+.btn.bad{border-color:rgba(255,92,92,0.45);background:rgba(255,92,92,0.10)}
+.out{margin-top:14px;background:#0a1427;border:1px solid var(--border);border-radius:12px;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;white-space:pre-wrap;word-break:break-word}
+.status{margin-top:10px;font-size:13px;color:var(--muted)}
+.status.ok{color:var(--ok)}
+.status.bad{color:var(--bad)}
+.small{color:var(--muted);font-size:12px;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>FiveM Blip Builder</h1>
+    <p class="sub">Fill the fields, generate the Lua snippet, and copy it.</p>
+
+    <div class="grid">
+      <div>
+        <label>X</label><input id="x" type="number" step="any" placeholder="468.52">
+        <label>Y</label><input id="y" type="number" step="any" placeholder="-928.83">
+        <label>Z</label><input id="z" type="number" step="any" placeholder="28.45">
+
+        <label>Sprite ID</label><input id="sprite" type="number" step="1" placeholder="60">
+        <label>Color</label><input id="color" type="number" step="1" placeholder="3">
+        <label>Scale</label><input id="scale" type="number" step="any" placeholder="0.8">
+
+        <label>Name</label><input id="name" type="text" placeholder="Police Station">
+      </div>
+
+      <div>
+        <label>Short Range</label>
+        <select id="shortRange">
+          <option value="true" selected>true</option>
+          <option value="false">false</option>
+        </select>
+
+        <label>Display</label>
+        <select id="display">
+          <option value="4" selected>4 (Map + Minimap)</option>
+          <option value="2">2 (Map only)</option>
+          <option value="8">8 (Minimap only)</option>
+        </select>
+
+        <label>Category</label><input id="category" type="number" step="1" placeholder="(optional)">
+
+        <label>Route</label>
+        <select id="route">
+          <option value="false" selected>false</option>
+          <option value="true">true</option>
+        </select>
+
+        <label>Route Color</label><input id="routeColor" type="number" step="1" placeholder="(optional)">
+
+        <div class="row">
+          <button class="btn good" id="btnGenerate">Generate</button>
+          <button class="btn" id="btnDemo">Demo</button>
+          <button class="btn bad" id="btnClear">Clear</button>
+        </div>
+
+        <div id="status" class="status">Waiting for input</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn good" id="btnCopy">Copy Lua</button>
+      <button class="btn" id="btnCopyCoords">Copy coords line</button>
+    </div>
+
+    <div class="out" id="outBox">—</div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id)
+
+const status=$("status")
+const outBox=$("outBox")
+
+function num(id){
+const v=Number($(id).value)
+return Number.isFinite(v)?v:null
+}
+function txt(id){
+return String($(id).value||"").trim()
+}
+function escLuaString(s){
+return s.replace(/\\/g,"\\\\").replace(/"/g,'\\"')
+}
+
+function generate(){
+const x=num("x"),y=num("y"),z=num("z")
+if(x===null||y===null||z===null){
+status.className="status bad"
+status.textContent="X, Y, Z are required"
+outBox.textContent="—"
+return
+}
+
+const sprite=num("sprite") ?? 1
+const color=num("color") ?? 0
+const scale=num("scale") ?? 0.8
+const name=txt("name") || "Blip"
+
+const shortRange=$("shortRange").value
+const display=num("display") ?? 4
+const category=num("category")
+const route=$("route").value
+const routeColor=num("routeColor")
+
+const lines=[]
+lines.push(`local blip = AddBlipForCoord(${x}, ${y}, ${z})`)
+lines.push(`SetBlipSprite(blip, ${sprite})`)
+lines.push(`SetBlipDisplay(blip, ${display})`)
+lines.push(`SetBlipScale(blip, ${scale})`)
+lines.push(`SetBlipColour(blip, ${color})`)
+lines.push(`SetBlipAsShortRange(blip, ${shortRange})`)
+if(category!==null) lines.push(`SetBlipCategory(blip, ${category})`)
+if(route==="true"){
+lines.push(`SetBlipRoute(blip, true)`)
+if(routeColor!==null) lines.push(`SetBlipRouteColour(blip, ${routeColor})`)
+}
+lines.push(`BeginTextCommandSetBlipName("STRING")`)
+lines.push(`AddTextComponentString("${escLuaString(name)}")`)
+lines.push(`EndTextCommandSetBlipName(blip)`)
+
+outBox.textContent=lines.join("\n")
+status.className="status ok"
+status.textContent="Generated"
+}
+
+async function copy(text){
+if(!text||text==="—"){
+status.className="status bad"
+status.textContent="Nothing to copy"
+return
+}
+try{await navigator.clipboard.writeText(text)}
+catch{
+const ta=document.createElement("textarea")
+ta.value=text
+document.body.appendChild(ta)
+ta.select()
+document.execCommand("copy")
+document.body.removeChild(ta)
+}
+status.className="status ok"
+status.textContent="Copied"
+}
+
+$("btnGenerate").onclick=generate
+
+$("btnCopy").onclick=()=>copy(outBox.textContent)
+
+$("btnCopyCoords").onclick=()=>{
+const x=num("x"),y=num("y"),z=num("z")
+if(x===null||y===null||z===null) return copy("")
+copy(`local blip = AddBlipForCoord(${x}, ${y}, ${z})`)
+}
+
+$("btnDemo").onclick=()=>{
+$("x").value=468.52
+$("y").value=-928.83
+$("z").value=28.45
+$("sprite").value=60
+$("color").value=3
+$("scale").value=0.8
+$("name").value="Police Station"
+$("shortRange").value="true"
+$("display").value="4"
+$("category").value=""
+$("route").value="false"
+$("routeColor").value=""
+generate()
+}
+
+$("btnClear").onclick=()=>{
+["x","y","z","sprite","color","scale","name","category","routeColor"].forEach(id=>$(id).value="")
+$("shortRange").value="true"
+$("display").value="4"
+$("route").value="false"
+outBox.textContent="—"
+status.className="status"
+status.textContent="Waiting for input"
+}
+</script>
+</body>
+</html>
